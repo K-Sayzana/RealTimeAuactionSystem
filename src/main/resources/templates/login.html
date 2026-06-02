@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GavelHouse — Sign In</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #C9A84C; --gold-dark: #8B6914; --cream: #FAF6EE;
+      --ink: #1A1208; --wood: #2D1F0E; --muted: #6B5A3E;
+      --card: #FDF9F2; --border: rgba(201,168,76,0.3);
+      --red: #B5341A; --green: #2A7A3B;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Source Sans 3', sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+      background: var(--wood);
+      background-image: radial-gradient(ellipse at 30% 30%, rgba(201,168,76,0.12) 0%, transparent 60%);
+    }
+    .login-wrap { width: 100%; max-width: 440px; padding: 1rem; }
+    .login-box {
+      background: var(--cream); border: 1px solid var(--border);
+      border-radius: 14px; padding: 2.5rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .login-logo {
+      font-family: 'Playfair Display', serif; font-size: 2.2rem;
+      font-weight: 900; color: var(--gold); text-align: center; margin-bottom: 0.2rem;
+    }
+    .login-sub {
+      text-align: center; color: var(--muted); font-size: 0.88rem;
+      margin-bottom: 2rem; letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
+    .tab {
+      flex: 1; padding: 10px; text-align: center; cursor: pointer;
+      color: var(--muted); font-weight: 600; font-size: 0.9rem;
+      border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+    }
+    .tab.active { color: var(--gold-dark); border-bottom-color: var(--gold); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+    input, select {
+      width: 100%; padding: 10px 14px;
+      border: 1px solid var(--border); border-radius: 7px;
+      background: #fff; color: var(--ink); font-size: 0.95rem;
+      outline: none; transition: border-color 0.2s;
+      font-family: 'Source Sans 3', sans-serif;
+    }
+    input:focus, select:focus { border-color: var(--gold); }
+    .btn {
+      width: 100%; padding: 12px; border: none; border-radius: 7px;
+      font-weight: 700; cursor: pointer; font-size: 1rem;
+      font-family: 'Playfair Display', serif; transition: all 0.2s;
+    }
+    .btn-gold { background: linear-gradient(135deg, var(--gold-dark), var(--gold)); color: var(--wood); }
+    .btn-gold:hover { opacity: 0.88; }
+    .btn-primary { background: var(--wood); color: var(--gold); border: 1px solid var(--gold-dark); }
+    .btn-primary:hover { background: var(--gold); color: var(--wood); }
+    .msg { font-size: 0.88rem; margin-top: 0.6rem; min-height: 1.2em; }
+    .msg.error   { color: var(--red); }
+    .msg.success { color: var(--green); }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">GavelHouse</div>
+    <div class="login-sub">Live Auction Platform</div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('login')">Sign In</div>
+      <div class="tab"       onclick="switchTab('register')">Register</div>
+    </div>
+
+    <div id="tab-login" class="tab-panel active">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-gold" onclick="doLogin()">Enter Auction House</button>
+      <div id="loginMsg" class="msg"></div>
+    </div>
+
+    <div id="tab-register" class="tab-panel">
+      <div class="form-group">
+        <label>Choose a Username</label>
+        <input type="text" id="regUser" placeholder="Min 3 characters">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="Min 4 characters">
+      </div>
+      <div class="form-group">
+        <label>Account Type</label>
+        <select id="regRole">
+          <option value="BIDDER">Register as Bidder</option>
+          <option value="SELLER">Register as Seller</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="doRegister()">Create Account</button>
+      <div id="regMsg" class="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TAB_TOKEN_KEY = 'gavel_session_token';
+
+  function switchTab(t) {
+    document.querySelectorAll('.tab').forEach((el, i) =>
+            el.classList.toggle('active', ['login', 'register'][i] === t));
+    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + t).classList.add('active');
+  }
+
+  async function doLogin() {
+    const u   = document.getElementById('loginUser').value.trim();
+    const p   = document.getElementById('loginPass').value;
+    const msg = document.getElementById('loginMsg');
+    if (!u || !p) { setMsg(msg, 'Please fill in both fields.', 'error'); return; }
+
+    const r    = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await r.json();
+
+    if (data.error) {
+      setMsg(msg, data.error, 'error');
+    } else {
+      sessionStorage.setItem(TAB_TOKEN_KEY, data.token);
+
+      setMsg(msg, 'Welcome back, ' + data.username + '!', 'success');
+
+      window.location.replace(data.redirect);
+    }
+  }
+
+  async function doRegister() {
+    const u    = document.getElementById('regUser').value.trim();
+    const p    = document.getElementById('regPass').value;
+    const role = document.getElementById('regRole').value;
+    const msg  = document.getElementById('regMsg');
+
+    const r    = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p, role })
+    });
+    const data = await r.json();
+
+    if (data.error) { setMsg(msg, data.error, 'error'); }
+    else { setMsg(msg, data.message, 'success'); setTimeout(() => switchTab('login'), 1400); }
+  }
+
+  function setMsg(el, text, type) {
+    el.textContent = text;
+    el.className   = 'msg ' + type;
+  }
+
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('regPass').addEventListener('keydown',   e => { if (e.key === 'Enter') doRegister(); });
+</script>
+</body>
+</html>

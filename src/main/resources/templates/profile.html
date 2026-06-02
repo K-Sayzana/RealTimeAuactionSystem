@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GavelHouse — My Profile</title>
+  {{navbar}}
+  <style>
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.2rem; text-align: center;
+      transition: box-shadow 0.2s; overflow: hidden;
+    }
+    .stat-card:hover { box-shadow: 0 6px 20px rgba(201,168,76,0.12); }
+    .stat-num {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem; font-weight: 700; color: var(--gold-dark);
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+    }
+    .stat-label {
+      font-size: 0.78rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.25rem;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 10px 14px;
+      font-size: 0.78rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 2px solid var(--border);
+    }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(201,168,76,0.04); }
+    td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td:first-child { white-space: normal; }
+    .won-badge         { background: rgba(42,122,59,0.12); color: var(--green);    padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .lost-badge        { color: var(--muted); font-size: 0.8rem; }
+    .in-progress-badge { color: var(--gold-dark); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="section-title">My Bidder Profile</div>
+
+  <div id="statsArea">
+    <p style="color:var(--muted);font-style:italic">Loading your stats…</p>
+  </div>
+
+</div>
+
+<script>
+  let TAB_TOKEN = sessionStorage.getItem('gavel_session_token');
+
+  if (!TAB_TOKEN || TAB_TOKEN === 'null') {
+    const match = document.cookie.match(new RegExp('(^| )session=([^;]+)'));
+    if (match) {
+      TAB_TOKEN = match[2];
+      sessionStorage.setItem('gavel_session_token', TAB_TOKEN);
+    } else {
+      TAB_TOKEN = '';
+    }
+  }
+
+  function fmtMoney(val) {
+    if (val >= 1_000_000) return '$' + (val / 1_000_000).toFixed(1) + 'M';
+    if (val >= 10_000)    return '$' + (val / 1_000).toFixed(1)     + 'K';
+    return '$' + val.toFixed(2);
+  }
+
+  async function loadStats() {
+    const r = await fetch('/api/stats', {
+      headers: {
+        'Authorization': 'Bearer ' + TAB_TOKEN
+      }
+    });
+
+    if (!r.ok) {
+      document.getElementById('statsArea').innerHTML = '<p style="color:var(--red)">Failed to load stats.</p>';
+      return;
+    }
+    const s = await r.json();
+    const winRate = s.items_bid_on > 0 ? ((s.items_won / s.items_bid_on) * 100).toFixed(0) : 0;
+
+    document.getElementById('statsArea').innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-num">${s.total_bids}</div><div class="stat-label">Total Bids Placed</div></div>
+          <div class="stat-card"><div class="stat-num">${s.items_bid_on}</div><div class="stat-label">Lots Participated</div></div>
+          <div class="stat-card"><div class="stat-num">${s.items_won}</div><div class="stat-label">Lots Won</div></div>
+          <div class="stat-card"><div class="stat-num">${winRate}%</div><div class="stat-label">Win Rate</div></div>
+          <div class="stat-card"><div class="stat-num">${fmtMoney(s.highest_bid)}</div><div class="stat-label">Highest Single Bid</div></div>
+          <div class="stat-card"><div class="stat-num">${fmtMoney(s.total_won_value)}</div><div class="stat-label">Total Won Value</div></div>
+        </div>
+
+        <div class="section-title">Recent Bid History</div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Bid Amount</th><th>Time</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              ${(s.recent_bids || []).map(b => `
+                <tr>
+                  <td title="${b.item_name}">${b.item_name}</td>
+                  <td><strong>${fmtMoney(b.amount)}</strong></td>
+                  <td style="color:var(--muted);font-size:.85rem">${b.bid_time}</td>
+                  <td>${
+            b.won
+                    ? '<span class="won-badge">WON ✓</span>'
+                    : b.status === 'CLOSED'
+                            ? '<span class="lost-badge">Outbid</span>'
+                            : '<span class="in-progress-badge">In Progress</span>'
+    }</td>
+                </tr>`).join('')}
+              ${(s.recent_bids || []).length === 0
+            ? '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:2rem">No bids placed yet. Go bid on something!</td></tr>'
+            : ''}
+            </tbody>
+          </table>
+        </div>`;
+  }
+
+  loadStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GavelHouse — Admin Dashboard</title>
+  {{navbar}}
+  <style>
+    .dash-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.2rem; text-align: center;
+    }
+    .stat-num   { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; color: var(--gold-dark); }
+    .stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.2rem; }
+
+    .layout2 { display: grid; grid-template-columns: 1fr 350px; gap: 1.5rem; }
+    @media (max-width: 900px) { .layout2 { grid-template-columns: 1fr; } }
+
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 10px 14px;
+      font-size: 0.78rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 2px solid var(--border);
+    }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 0.87rem; }
+    tr:hover td { background: rgba(201,168,76,0.04); }
+
+    .add-form .form-group { margin-bottom: 0.9rem; }
+    textarea { resize: vertical; }
+    .dur-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .dur-grid label { font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="section-title">Seller Dashboard</div>
+
+  <div class="dash-grid" id="dashStats">
+    <p style="color:var(--muted);font-style:italic">Loading…</p>
+  </div>
+
+  <div class="layout2">
+
+    <div>
+      <div class="section-title">My Auction Lots</div>
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem">
+        <table>
+          <thead>
+          <tr>
+            <th>Item</th>
+            <th>Current Bid</th>
+            <th>Leader</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+          </thead>
+          <tbody id="itemsTable">
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="btn btn-gold" style="width:100%;padding:11px" onclick="exportResults()">⬇ Export Results to .txt</button>
+      <div id="exportMsg" style="text-align:center;font-size:.85rem;color:var(--green);margin-top:.6rem;min-height:1.2em"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Add New Lot</div>
+      <div class="card add-form">
+        <div class="form-group">
+          <label>Item Name</label>
+          <input type="text" id="aName" placeholder="e.g. Vintage Camera">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="aDesc" rows="2" placeholder="Describe the item…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Starting Price ($)</label>
+          <input type="number" id="aPrice" min="1" step="0.01" placeholder="e.g. 100.00">
+        </div>
+        <div class="form-group">
+          <label>Auction Duration</label>
+          <div class="dur-grid">
+            <div>
+              <label>Days</label>
+              <input type="number" id="aDurD" min="0" max="30" value="0" placeholder="0">
+            </div>
+            <div>
+              <label>Hours</label>
+              <input type="number" id="aDurH" min="0" max="23" value="0" placeholder="0">
+            </div>
+          </div>
+          <div id="durationPreview" style="font-size:0.8rem;color:var(--muted);margin-top:0.4rem"></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;padding:11px" onclick="addItem()">Add Auction Lot</button>
+        <div id="addMsg"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let TAB_TOKEN = sessionStorage.getItem('gavel_session_token');
+
+  if (!TAB_TOKEN || TAB_TOKEN === 'null') {
+    const match = document.cookie.match(new RegExp('(^| )session=([^;]+)'));
+    if (match) {
+      TAB_TOKEN = match[2];
+      sessionStorage.setItem('gavel_session_token', TAB_TOKEN);
+    } else {
+      TAB_TOKEN = '';
+    }
+  }
+
+  let MY_NAME = "";
+  let ws;
+  let sellerItems = {};
+
+  function connectDashboard() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/auction-ws`);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'IDENTIFY', token: TAB_TOKEN }));
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      switch (msg.type) {
+        case 'INIT':
+          MY_NAME = msg.username;
+
+          msg.items.forEach(i => {
+            if (i.seller === MY_NAME) sellerItems[i.id] = i;
+          });
+          renderItemsTable();
+          break;
+
+        case 'BID_UPDATE':
+          if (sellerItems[msg.item.id]) {
+            sellerItems[msg.item.id] = msg.item;
+            renderItemsTable();
+            loadDash();
+          }
+          break;
+
+        case 'ITEM_CLOSED':
+          if (msg.item && sellerItems[msg.item.id]) {
+            sellerItems[msg.item.id] = msg.item;
+            renderItemsTable();
+            loadDash();
+          }
+          break;
+
+        case 'ITEM_ADDED':
+          if (msg.item && msg.item.seller === MY_NAME) {
+            sellerItems[msg.item.id] = msg.item;
+            renderItemsTable();
+            loadDash();
+          }
+          break;
+
+        case 'TICK':
+          msg.items.forEach(i => {
+            if (sellerItems[i.id]) sellerItems[i.id].seconds_left = i.seconds_left;
+          });
+          renderItemsTable();
+          break;
+      }
+    };
+  }
+
+  async function loadDash() {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    document.getElementById('dashStats').innerHTML = `
+        <div class="stat-card"><div class="stat-num">${s.total_items}</div><div class="stat-label">Total Lots</div></div>
+        <div class="stat-card"><div class="stat-num">${s.open_items}</div><div class="stat-label">Open</div></div>
+        <div class="stat-card"><div class="stat-num">${s.closed_items}</div><div class="stat-label">Closed</div></div>
+        <div class="stat-card"><div class="stat-num">$${s.total_revenue.toFixed(0)}</div><div class="stat-label">Revenue</div></div>`;
+  }
+
+  function renderItemsTable() {
+    const items = Object.values(sellerItems);
+    const tbody = document.getElementById('itemsTable');
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No items yet. Add your first lot!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(i => {
+      const closed = i.status === 'CLOSED';
+      const timer  = closed ? '—' : (i.seconds_left > 0 ? fmtTime(i.seconds_left) : 'Expiring…');
+      return `<tr>
+          <td><strong>${i.name}</strong><br><span style="font-size:.78rem;color:var(--muted)">${timer}</span></td>
+          <td>$${i.current_bid.toFixed(2)}</td>
+          <td>${i.top_bidder}</td>
+          <td><span class="badge ${closed ? 'badge-closed' : 'badge-open'}">${i.status}</span></td>
+          <td>${!closed
+              ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:.8rem" onclick="closeItem(${i.id})">Close</button>`
+              : '—'}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function fmtTime(sec) {
+    const HOUR = 3600, DAY = 86400;
+    const d = Math.floor(sec / DAY);   sec %= DAY;
+    const h = Math.floor(sec / HOUR);  sec %= HOUR;
+    const m = Math.floor(sec / 60);    sec %= 60;
+    const parts = [];
+    if (d > 0) parts.push(d + 'd');
+    if (h > 0) parts.push(h + 'h');
+    if (m > 0) parts.push(m + 'm');
+    if (parts.length === 0) parts.push(sec + 's');
+    return parts.slice(0, 2).join(' ');
+  }
+
+  const MAX_MINS = 43200;
+
+  function calcTotalMinutes() {
+    const d = parseInt(document.getElementById('aDurD').value) || 0;
+    const h = parseInt(document.getElementById('aDurH').value) || 0;
+    return (d * 24 * 60) + (h * 60);
+  }
+
+  function updateDurationPreview() {
+    const total   = calcTotalMinutes();
+    const preview = document.getElementById('durationPreview');
+    if (total <= 0) { preview.textContent = ''; return; }
+    if (total > MAX_MINS) {
+      preview.style.color = 'var(--red)';
+      preview.textContent = 'Exceeds 1 month maximum';
+    } else {
+      const d = Math.floor(total / (24 * 60));
+      const h = Math.floor((total % (24 * 60)) / 60);
+      const parts = [];
+      if (d > 0) parts.push(d + ' day' + (d !== 1 ? 's' : ''));
+      if (h > 0) parts.push(h + ' hour' + (h !== 1 ? 's' : ''));
+      preview.style.color = 'var(--muted)';
+      preview.textContent = 'Duration: ' + (parts.join(' ') || '0 hours');
+    }
+  }
+
+  ['aDurD', 'aDurH'].forEach(id =>
+          document.getElementById(id).addEventListener('input', updateDurationPreview));
+
+  async function addItem() {
+    const name  = document.getElementById('aName').value.trim();
+    const desc  = document.getElementById('aDesc').value.trim();
+    const price = parseFloat(document.getElementById('aPrice').value);
+    const dur   = calcTotalMinutes();
+    const msg   = document.getElementById('addMsg');
+
+    const r    = await fetch('/api/items', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ name, description: desc, startPrice: price, durationMinutes: dur })
+    });
+    const data = await r.json();
+
+    if (data.error) {
+      msg.className   = 'msg-error';
+      msg.textContent = data.error;
+    } else {
+      msg.className   = 'msg-success';
+      msg.textContent = 'Lot added! Dashboard will update automatically.';
+      document.getElementById('aName').value  = '';
+      document.getElementById('aDesc').value  = '';
+      document.getElementById('aPrice').value = '';
+      document.getElementById('aDurD').value  = '0';
+      document.getElementById('aDurH').value  = '0';
+      document.getElementById('durationPreview').textContent = '';
+    }
+  }
+
+  async function closeItem(id) {
+    if (!confirm('Close this lot now? No more bids will be accepted.')) return;
+    await fetch('/api/items/' + id + '/close', { method: 'POST' });
+  }
+
+  async function exportResults() {
+    const r    = await fetch('/api/export', { method: 'POST' });
+    const data = await r.json();
+    document.getElementById('exportMsg').textContent = data.message + ' → ' + data.filename;
+  }
+
+  loadDash();
+  connectDashboard();
+</script>
+</body>
+</html>

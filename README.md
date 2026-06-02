@@ -63,10 +63,4 @@ Make sure the following tools are installed:
 * Real-time event-based sales platforms
 
 
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
-
 ⭐ Feel free to fork, contribute, and improve the platform.
